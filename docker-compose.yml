@@ -1,0 +1,51 @@
+version: '3.8'
+
+networks:
+  myapp-network:
+    driver: bridge
+
+services:
+  database:
+    image: mysql:8.0
+    container_name: database
+    networks:
+      - myapp-network
+    environment:
+      MYSQL_ROOT_PASSWORD: secret123
+      MYSQL_DATABASE: myapp
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: backend
+    networks:
+      - myapp-network
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      - DB_HOST=database
+      - DB_USER=root
+      - DB_PASSWORD=secret123
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    networks:
+      - myapp-network
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

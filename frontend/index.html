@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Docker Networking Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .network-diagram {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .user-list {
+            margin-top: 20px;
+        }
+        
+        .user-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .status.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐳 Docker Networking Demo</h1>
+        
+        <div class="card">
+            <h2>Network Architecture</h2>
+            <div class="network-diagram">
+┌─────────────────────────────────────────┐
+│         myapp-network (bridge)          │
+│                                         │
+│  ┌──────────┐    ┌──────────┐         │
+│  │ Frontend │───→│ Backend  │         │
+│  │  (nginx) │    │ (Node.js)│         │
+│  │  :80     │    │  :3000   │         │
+│  └──────────┘    └─────┬────┘         │
+│                        │               │
+│                        ↓               │
+│                  ┌──────────┐         │
+│                  │ Database │         │
+│                  │  (MySQL) │         │
+│                  │  :3306   │         │
+│                  └──────────┘         │
+│                                         │
+└─────────────────────────────────────────┘
+
+Communication by container names!
+Frontend calls: http://backend:3000
+Backend calls: mysql://database:3306
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Service Status</h2>
+            <button onclick="checkHealth()">Check All Services</button>
+            <div id="health-status"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Users Database</h2>
+            <button onclick="loadUsers()">Load Users</button>
+            <button onclick="loadUser(1)">Get User #1</button>
+            <button onclick="loadUser(2)">Get User #2</button>
+            <div id="users-list"></div>
+        </div>
+        
+        <div class="card">
+            <h2>Network Explanation</h2>
+            <ul style="line-height: 2;">
+                <li>✅ All containers on <strong>myapp-network</strong></li>
+                <li>✅ Containers use <strong>names</strong> to communicate</li>
+                <li>✅ Frontend → Backend (by name "backend")</li>
+                <li>✅ Backend → Database (by name "database")</li>
+                <li>✅ Isolated from other Docker networks</li>
+                <li>✅ Automatic DNS resolution</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000';
+        
+        async function checkHealth() {
+            const statusDiv = document.getElementById('health-status');
+            statusDiv.innerHTML = '<div class="loading">Checking services...</div>';
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/health`);
+                const data = await response.json();
+                
+                statusDiv.innerHTML = `
+                    <div style="margin-top: 20px;">
+                        <span class="status healthy">✅ Backend: ${data.status}</span>
+                        <p style="margin-top: 10px; color: #666;">
+                            Backend is running and can communicate with database!
+                        </p>
+                    </div>
+                `;
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div style="margin-top: 20px;">
+                        <span class="status error">❌ Backend: Error</span>
+                        <p style="margin-top: 10px; color: #721c24;">
+                            ${error.message}
+                        </p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function loadUsers() {
+            const usersDiv = document.getElementById('users-list');
+            usersDiv.innerHTML = '<div class="loading">Loading users...</div>';
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/users`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const usersHTML = result.data.map(user => `
+                        <div class="user-item">
+                            <strong>ID:</strong> ${user.id} | 
+                            <strong>Name:</strong> ${user.name} | 
+                            <strong>Role:</strong> ${user.role}
+                        </div>
+                    `).join('');
+                    
+                    usersDiv.innerHTML = `
+                        <div class="user-list">
+                            <h3>Users from Database</h3>
+                            ${usersHTML}
+                            <p style="margin-top: 15px; color: #666;">
+                                <small>Data fetched: Frontend → Backend → Database</small>
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    usersDiv.innerHTML = `
+                        <div class="status error">Error: ${result.error}</div>
+                    `;
+                }
+            } catch (error) {
+                usersDiv.innerHTML = `
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+            }
+        }
+        
+        async function loadUser(id) {
+            const usersDiv = document.getElementById('users-list');
+            usersDiv.innerHTML = `<div class="loading">Loading user #${id}...</div>`;
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/users/${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    usersDiv.innerHTML = `
+                        <div class="user-list">
+                            <h3>User Details</h3>
+                            <div class="user-item">
+                                <strong>ID:</strong> ${result.data.id}<br>
+                                <strong>Name:</strong> ${result.data.name}<br>
+                                <strong>Role:</strong> ${result.data.role}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    usersDiv.innerHTML = `
+                        <div class="status error">${result.error}</div>
+                    `;
+                }
+            } catch (error) {
+                usersDiv.innerHTML = `
+                    <div class="status error">Error: ${error.message}</div>
+                `;
+            }
+        }
+        
+        // Auto-check on load
+        checkHealth();
+    </script>
+</body>
+</html>
